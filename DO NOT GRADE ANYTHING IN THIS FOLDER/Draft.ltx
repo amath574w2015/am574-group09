@@ -1,0 +1,294 @@
+\documentclass[12pt]{article} 
+
+\usepackage[english]{babel}
+
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\usepackage{amsthm}
+\usepackage{mathtools}
+\usepackage[titletoc,toc,title]{appendix}
+\usepackage{fancyvrb}
+\usepackage[margin=1in]{geometry}
+\usepackage{titling}
+\usepackage{verbatim}
+
+\newcommand{\N}{\mathbb{N}}
+\newcommand{\Z}{\mathbb{Z}}
+\DeclareMathOperator{\sech}{sech}
+\DeclareMathOperator{\minmod}{minmod}
+\DeclareMathOperator{\sgn}{sgn}
+\newcommand{\beq}{\begin{equation}}
+\newcommand{\eeq}{\end{equation}}
+\newcommand{\ba}{\begin{array}}
+\newcommand{\ea}{\end{array}}
+\newcommand{\bea}{\begin{eqnarray}}
+\newcommand{\eea}{\end{eqnarray}}
+\newcommand{\bc}{\begin{center}}
+\newcommand{\ec}{\end{center}}
+\newcommand{\ds}{\displaystyle}
+\newcommand{\bt}{\begin{table}}
+\newcommand{\et}{\end{table}}
+\newcommand{\vs}{\vspace*{0.1in}}
+\newcommand{\no}{\noindent}
+\newcommand{\la}[1]{\label{#1}}
+\newcommand{\p}{\partial}
+\newcommand{\pp}[2]{{\partial #1 \over \partial #2}}
+\newcommand{\ppn}[3]{{\partial^{#1} #2 \over \partial #3^{#1}}}
+\newcommand{\Pain}{Painlev\'{e} }
+\newcommand{\mbf}[1]{\mbox{\boldmath {$#1$}}}
+\newtheorem{mytheorem}{Theorem}
+
+
+
+\title{Augmented approximate Riemann solvers for the shallow water equations with varying bathymetry}
+\author{Xin Chen \\ Jacob Ortega-Gingrich}
+\date{} 
+
+% CUSTOM COMMANDS
+\newcommand{\eref}[1]{\mbox{Eq.\hspace{.12cm}(\ref{eq:#1})}} 
+
+
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+
+We describe an augmented Riemann solver for the one-dimensional shallow water equations with variable topography suggested by David George which addresses a number of the needs of applications involving flooding and small perturbations of delicate steady states.  Fluid flows over varying topography, for example add a source term which the numerical method must balance with jumps in momentum and depth in order to preserve delicate steady states, such as an ocean at rest.  Furthermore, applications involving flooding, such as the modeling of tsunami inundation, require a Riemann solver that can handle dry cells and preserve depth non-negativity in such cases.  The augmented solver herein discussed amalgamates various aspects of existing solvers such as the HLLE solvers and f-wave approaches.  Additionally, we discuss some specific techniques which may be use to handle various challenging situations which may arise in a model such as the handling of steep shorelines.  Finally, we discuss an implementation of this augmented Riemann solver for the one-dimensional shallow water equations which may be used in conjunction with the CLAWPACK software and present a few numerical demonstrations.
+
+\end{abstract}
+
+\section{Introduction}
+
+The shallow water equations are a system of nonlinear partial differential equations derived from integrating the Navier-Stokes equations over depth.  They are useful for applications involving flows with little vertical variation from hydrostatic equilibrium, such as waves whose length scales greatly exceed the depths of the fluid (for example, in the modeling of tsunami waves).  In one spatial dimension with varying bathymetry, the equations take the form
+\begin{align*}
+h_t+(h u)_x&=0\\
+(h u)_t+\left(h u^2+\frac{1}{2} g h^2\right)_x&=-g h b_x
+\end{align*}
+where $h(x,t)$ is the depth of the water (from the free surface to the sea floor), $u(x,t)$ is the velocity of the water and $b(x)$ is the fixed underwater topography.  As these equations take the form of a hyperbolic conservation law (with a source term for the transfer of momentum between the fluid and the sea floor), a finite volume-based approach is natural for many applications.  Central to such an approach is the solution of a large number of Riemann problems at every grid cell interface at each time step.  Although analytic solutions to arbitrary Riemann problems with the shallow water equations are possible to obtain, the use of exact solutions at each cell interface is impractical and some sort of approximate solver must be used.
+
+Of course, a Riemann solver must be constructed in such a way as to possess certain prescribed properties demanded by the application.  In this paper, we focus primarily on the demands which arise from the modeling of tsunami waves, both in terms of their propagation over an open ocean and their inundation.  In order to allow for effective inundation modeling, we clearly require a Riemann solver which must be able to handle dry states.  For one thing, the Riemann solver must be positive semidefinite so as to disallow cells with negative depths; however, the inclusion of dry cells is not quite so simple as simply using a method which guarantees non-negative depths.  Special precautions must also be taken at grid interfaces along shorelines, especially particularly steep ones, to prevent the appearance of spurious oscillations.  Additionally, since tsunami waves are small perturbations of an ocean at rest over variable bathymetry, it is critical that the Riemann solver be able to preserve steady states involving a flat surface even with large variations in the underlying topography.  We will discuss a few individual approaches which may be used to insure that the resulting numerical method satisfies these properties.
+
+\subsection{The wave propagation algorithm}
+
+At the core of the finite volume methods with which the Riemann solvers herein discussed can be used is a wave propagation algorithm of the form
+\begin{align*}
+Q_i^{n+1}&=Q_i^n-\frac{\Delta t}{\Delta x} (\mathcal{A}^+\Delta Q_{i-\frac{1}{2}}^n+\mathcal{A}^-\Delta Q_{i+\frac{1}{2}}^n)
+\end{align*}
+which is used to update the cell values.  In a wave propagation-based approach, the fluctuations $A^\pm \Delta Q_{i-\frac{1}{2}}$ are determined by decomposing the jump at the cell interface into a sum of $M_w$ waves
+\begin{align*}
+Q_i^n-Q_{i-1}^n=\sum_{p=1}^{M_w} \mathcal{W}_{i-\frac{1}{2}}^p
+\end{align*}
+which propagate from the discontinuity at speeds $s_{i-\frac{1}{2}}^p$.  The fluctuations then used to update the cell values are
+\begin{align*}
+\mathcal{A}^- \Delta Q_{i-\frac{1}{2}}&=\sum_{\lbrace p:s^p_{i-\frac{1}{2}}<0\rbrace} s_{i-\frac{1}{2}}^p \mathcal{W}_{i-\frac{1}{2}}^p\\
+\mathcal{A}^+\Delta Q_{i-\frac{1}{2}}&=\sum_{\lbrace p: s_{i-\frac{1}{2}}^p>0} s_{i-\frac{1}{2}}^p \mathcal{W}_{i-\frac{1}{2}}^p.
+\end{align*}
+An alternate formulation of the fluctuations (which is ultimately the one that we will use with our Riemann solver) can be obtained by decomposing the jump in fluxes across the cell interface rather than the jump in $Q$.  Doing so, we have
+\begin{align*}
+f(Q_i)-f(Q_{i-1})=\sum_{p=1}^{M_w} \mathcal{Z}_{i-\frac{1}{2}}^p
+\end{align*}
+and we may define our updating fluctuations as
+\begin{align*}
+\mathcal{A}^+ \Delta Q_{i-\frac{1}{2}}=\sum_p \max(0,s_{i-\frac{1}{2}}^p) \mathcal{Z}_{i-\frac{1}{2}}^p\\
+\mathcal{A}^- \Delta Q_{i-\frac{1}{2}}=\sum_p \min(0,s_{i-\frac{1}{2}}^p) \mathcal{Z}_{i-\frac{1}{2}}^p.
+\end{align*}
+This approach, which is known as the f-wave approach, shall be the one with which we incorporate the Riemann solver to be discussed below.
+
+\subsection{The Roe solver}
+
+[Insert a (very short) description of the Roe solver here.  (Assume reader is already familiar)]
+
+\section{The HLLE solver and depth non-negativity}
+
+[Clean up transition between different authors]
+
+While efficient and very effective in cases of flat bathymetry, provided that there is no strong transonic rarefaction, the pure Roe Solver in itself does not quite meet our needs.  As a first step, we wish to ensure depth non-negativity by using a modified version of the Roe method known as the HLLE method.  The The HLLE solver is a Godunov type approximate Riemann solver. The main idea is to approximate the Riemann problem with the two waves of the smallest wave speed $s_{i-1/2}^1$ and the largest wave speed $s_{i-1/2}^2$. Then there are only three states, the left state $Q_{i-1}$, the right state $Q_{i}$ and the intermediate state $\hat{Q}_{i-1/2}$ in between, which is given by
+\begin{equation}
+\hat{Q}_{i-1/2}=\frac{f(Q_i)-f(Q_{i-1})-s_{i-1/2}^2 Q_i + s_{i-1/2}^1 Q_{i-1}}{s_{i-1/2}^1-s_{i-1/2}^2}
+\end{equation}
+The wave speeds are given by
+\begin{align}
+s_{i-1/2}^1=\min_p \left( \min{\left(\lambda_{i-1}^p,\hat{\lambda}_{i-1/2}^p \right)} \right) \\
+s_{i-1/2}^2=\max_p \left( \max{\left(\lambda_{i-1}^p,\hat{\lambda}_{i-1/2}^p \right)} \right)
+\end{align}
+Where $\lambda_j^p$ is the $pth$ eigenvalue of the Jacobian matrix $f'(Q_j)$ and $\hat{\lambda}_{i-1/2}^p$ is the $pth$ eigenvalue of the Roe average. These wave speeds, which are known as the Einfeldt speeds, can be thought of as modified versions of the Roe wave speeds which are "limited" in such a way as to insure the non-negativity of the solution.  Unfortunately, however, this method continues to fail to capture large transonic rarefactions, as each of the two waves radiating from the discontinuity are still represented each by a single discontinuity; thus, we still require some sort of entropy fix.  One natural way to implement this is to represent a large rarefaction fan with two discontinuities, which may propagate into different cells in the case of transonic rarefaction.  To do this, however, we must decompose our flux difference into more than two waves.  Thus, we arrive at the augmented Riemann solver proposed by George.
+
+\section{The augmented solver}
+
+[Clean up transition between different authors]
+
+The Augmented Riemann solver proposed in [6] are based on eigenvalue decompositions, which is very different from the HLL-type method. This method has the desirable properties introduced above. The main idea of this method is to introduce more than two waves for the shallow water equations to enable natural and intuitive constraints on non-negativity and well balance properties. 
+
+[Note: organization of these subsections may (i.e. will) change]
+
+\subsection{Augmented Riemann solver for homogeneous shallow water equations} 
+
+The homogeneous shallow water equations are given by
+\begin{align}
+&h_t+(hu)_x=0\\
+&(hu)_t+\left(h u^2+\frac{1}{2}g h^2 \right)_x=0
+\end{align}
+
+Instead using the standard wave decomposition with only two waves, the augmented Riemann solver uses a decomposition of the following form
+\begin{align}
+\begin{bmatrix}
+H_i-H_{i-1}\\
+HU_i-HU_{i-1}\\
+\varphi(Q_i)-\varphi(Q_{i-1})
+\end{bmatrix}=\sum_{p=1}^3 \alpha_{i-1/2}^p w_{i-1/2}^p
+\end{align}
+where $Q_i=(H_i,HU_i)^T$ is the numerical solution for $q=(h,hu)^T$ in cell $C_i$, $\varphi(Q_i)=hu^2+\frac{1}{2}gh^2$. Notice that if we look at only the first two components, then the method is exactly the "simple" decomposition. If we look at only the last two components, then it is exactly the f-wave method. Therefore, we expect this method to enjoy some nice properties of both world. Because the last two components are the conserved quantities, we define the flux waves as follows
+\begin{equation}
+\mathcal{Z}_{i-1/2}^p =\left[\mathbf{0}_{2\times1} \quad \mathbf{I}_{2\times2}\right] \alpha_{i-1/2}^p w_{i-1/2}^p
+\end{equation}
+
+Then the fluctuations are defined as
+\begin{align}
+\mathcal{A}^- \Delta Q_{i-1/2}=\sum_{\{p:s_{i-1/2}^p <0\}} \mathcal{Z}_{i-1/2}^p \\
+\mathcal{A}^+ \Delta Q_{i-1/2}=\sum_{\{p:s_{i-1/2}^p >0\}} \mathcal{Z}_{i-1/2}^p
+\end{align}
+
+Next we need to determine the choices for $w_{i-1/2}^p$. Since we would like to have the non-negativity property similar to the HLLE method, we are going to choose the following vectors and corresponding wave speeds
+\begin{align}
+\left\{ w_{i-1/2}^1,s_{i-1/2}^1\right\}=\left\{\left(1,\check{s}_{i-1/2}^-,\left(\check{s}_{i-1/2}^-\right)^2\right)^T, \check{s}_{i-1/2}^- \right\} \\
+\left\{ w_{i-1/2}^3,s_{i-1/2}^3\right\}=\left\{\left(1,\check{s}_{i-1/2}^+,\left(\check{s}_{i-1/2}^+\right)^2\right)^T, \check{s}_{i-1/2}^+ \right\}
+\end{align}
+
+For the second pair, we could have different choices. The simplest choice takes the following form
+\begin{equation}
+\left\{ w_{i-1/2}^2,s_{i-1/2}^2      \right\}=\left\{  \left(0,0,1\right)^T, \frac{1}{2} \left(\check{s}_{i-1/2}^- + \check{s}_{i-1/2}^+ \right)    \right\}
+\end{equation}
+
+Notice that choosing the above $\left\{w_{i-1/2}^2,s_{i-1/2}^2\right\}$ the depth is equivalent to the HLLE solver. Therefore, the middle state of the depth component is given by
+\begin{equation}
+\check{H}_{i-1/2}^*=\frac{HU_{i-1}-HU_i+\check{s}_{i-1/2}^+ H_i-\check{s}_{i-1/2}^- H_{i-1}}{\check{s}_{i-1/2}^+-\check{s}_{i-1/2}^-}
+\end{equation}
+\subsection{Augmented Riemann solver for shallow water equation with source terms}
+The shallow water equations with source terms are given by
+\begin{align}
+&h_t+(hu)_x=0\\
+&(hu)_t+\left(h u^2+\frac{1}{2}g h^2 \right)_x=-ghb_x
+\end{align}
+
+A natural extension of the Riemann solver introduced above is to add yet another component to the decomposition to account for the impact of the source terms. 
+\begin{align}
+\begin{bmatrix}
+H_i-H_{i-1}\\
+HU_i-HU_{i-1}\\
+\varphi(Q_i)-\varphi(Q_{i-1}) \\
+B_i-B_{i-1}
+\end{bmatrix}=\sum_{p=0}^3 \alpha_{i-1/2}^p w_{i-1/2}^p
+\end{align}
+
+As we can see from the equation above, the discontinuity is decomposed into four different waves. Similar to the homogeneous case, we define the flux waves as
+\begin{equation}
+\mathcal{Z}_{i-1/2}^p =\left[\mathbf{0}_{2\times1} \quad \mathbf{I}_{2\times2} \quad \mathbf{0}_{2\times1}\right] \alpha_{i-1/2}^p w_{i-1/2}^p
+\end{equation}
+And the fluctuations are defined by
+\begin{align}
+\mathcal{A}^- \Delta Q_{i-1/2}=\sum_{\{p:s_{i-1/2}^p <0\}} \mathcal{Z}_{i-1/2}^p \\
+\mathcal{A}^+ \Delta Q_{i-1/2}=\sum_{\{p:s_{i-1/2}^p >0\}} \mathcal{Z}_{i-1/2}^p
+\end{align}
+
+An intuitive way to understand this decomposition is to view it as the simple Riemann solver for the system of four equations as follows
+\begin{equation}
+\tilde{q}_t+W\left(\tilde{q}\right)\tilde{q}_x=0
+\end{equation}
+Where,
+\begin{align}
+\tilde{q}&=\left(h,hu,\varphi,b\right)^T\\
+W\left(\tilde{q}\right)&=\begin{bmatrix}
+0 & 1 & 0 & 0 \\
+-u^2+gh & 2u & 0 & gh \\
+0 & -u^2+gh & 2u & 2ugh \\
+0 & 0 & 0 & 0
+\end{bmatrix}
+\end{align}
+
+The eigenparis the matrix is given by
+\begin{align}
+\left\{r^0(\tilde{q}),\lambda^0(\tilde{q})\right\}&=\left\{\left(\frac{gh}{\lambda^1(\tilde{q})\lambda^3(\tilde{q})},0,-gh,1\right)^T,0\right\} \\
+\left\{r^1(\tilde{q}),\lambda^1(\tilde{q})\right\}&=\left\{(1,\lambda^1(\tilde{q}),(\lambda^1(\tilde{q}))^2,0)^T,u-\sqrt{gh}\right\}\\
+\left\{r^2(\tilde{q}),\lambda^2(\tilde{q})\right\}&=\left\{(0,0,1,0)^T,2u\right\}\\
+\left\{r^3(\tilde{q}),\lambda^3(\tilde{q})\right\}&=\left\{(1,\lambda^3(\tilde{q}),(\lambda^3(\tilde{q}))^2,0)^T,u+\sqrt{gh}\right\}\\
+\end{align}
+
+Notice the remarkable resemblance between these eigenpairs and the ones in the homogeneous case. This naturally leads to the choice of eigenparis in the following form
+\begin{align}
+\left\{ w_{i-1/2}^1,s_{i-1/2}^1\right\}&=\left\{\left(1,\check{s}_{i-1/2}^-,\left(\check{s}_{i-1/2}^-\right)^2,0\right)^T, \check{s}_{i-1/2}^- \right\} \\
+\left\{ w_{i-1/2}^2,s_{i-1/2}^2      \right\}&=\left\{  \left(0,0,1\right)^T, \frac{1}{2} \left(\check{s}_{i-1/2}^- + \check{s}_{i-1/2}^+ \right)    \right\}\\
+\left\{ w_{i-1/2}^3,s_{i-1/2}^3\right\}&=\left\{\left(1,\check{s}_{i-1/2}^+,\left(\check{s}_{i-1/2}^+\right)^2,0\right)^T, \check{s}_{i-1/2}^+ \right\}
+\end{align}
+
+Next we need to determine how to choose the eigenpair $\{w_{i-1/2}^0,s_{i-1/2}^0\}$. It is easy to see that the new homogeneous system has an identically zero eigenvalue $\lambda^0(\tilde{q})$. For steady state solutions, $\tilde{q}_t=0$, therefore, 
+\begin{equation}
+W(\tilde{q}) \tilde{q}_x=0
+\end{equation}
+It implies $\tilde{q}$ must be a scalar multiple of the zero eigenvector. The theorem from [6] is used to define $w_{i-1/2}^0$.
+\begin{mytheorem}
+Suppose that a smooth steady state solution to the shallow water equations exists between two points $x_l$ and $x_r$, with $b(x_l) \neq b(x_r)$. If the vector $\tilde{q}(x,t)$ is differenced between $x_l$ and $x_r$, then the difference must satisfy
+\begin{equation}
+\tilde{q}(x_r,t)-\tilde{q}(x_l,t)=(b(x_r)-b(x_l))\begin{bmatrix}
+\frac{g\bar{H}(q(x_l,t),q(x_r,t))}{\overline{\lambda^+ \lambda^-}(q(x_l,t),q(x_r,t))}\\
+0\\
+-g\tilde{H}(q(x_l,t),q(x_r,t))\\
+1
+\end{bmatrix}
+\end{equation}
+\end{mytheorem}
+Where,
+\begin{align}
+\overline{\lambda^+ \lambda^-}(q(x_l,t),q(x_r,t))&=\left(\frac{u_l+u_r}{2}\right)^2-g\left(\frac{h_l+h_r}{2}\right)  \\
+\bar{H}(q(x_l,t),q(x_r,t))&=\frac{h_l+h_r}{2}\\
+\widetilde{\lambda^+ \lambda^-}(q(x_l,t),q(x_r,t))&= \max (0,u_r u_l)-g\left(\frac{h_l+h_r}{2}\right)\\
+\tilde{H}(q(x_l,t),q(x_r,t))&=\bar{H}(q(x_l,t),q(x_r,t)) \frac{\widetilde{\lambda^+ \lambda^-}(q(x_l,t),q(x_r,t))}{\overline{\lambda^+ \lambda^-}(q(x_l,t),q(x_r,t))}
+\end{align}
+Replacing the actual solutions with numerical solutions, we get the following formula
+\begin{equation}
+w_{i-1/2}^0=\begin{bmatrix}
+\frac{g\bar{H}(Q_{i-1},Q_i)}{\overline{\lambda^+ \lambda^-}(Q_{i-1},Q_i)}\\
+0\\
+-g\tilde{H}(Q_{i-1},Q_i)\\
+1
+\end{bmatrix}
+\end{equation}
+
+
+\section{Riemann problems involving dry cells}
+
+[Insert here some descriptions of the various modifications which must be made to deal with Riemann problems involving dry states.  E.g. the use of a "dry tolerance," ghost cell test problems and wall boundary conditions on steep shores.  We will fill in this section once the code is running]
+
+\section{Numerical Experiments}
+[Note:  We are still working on implementing the augmented Riemann solver.  The eventual goal is to have a solver which can be included in CLAWPACK for use with the classic 1d code.  In the mean time, for debugging purposes, we are working on getting an implementation of the solver as well as an implementation of the wave propagation algorithm in MATLAB.  At this point (Wednesday afternoon), we have the first order method (without correction terms) running well in the absence of dry cells, even with drastically varying bathymetry, demonstrating that the method is indeed well balanced.  We are still having some trouble, however, with dry cells, particularly near coastlines that we are trying to resolve.  We anticipate that we should have the full method working by next week, at which time this section will be expanded to add a number of tests demonstrating flooding, and small perturbations to steady states.]
+
+\section{Conclusions}
+[To be filled in last.]
+
+
+\section*{References}
+
+[To Do: merge reference sections and standardize formats]
+
+[1] Einfeldt, 1988
+
+[2] Einfeldt, 1991
+
+[3] LeVeque textbook
+
+[4] George, Master Thesis 2004
+
+[5] LeVeque, George, Advanced Numerical Methods for Simulating TsunamiW aves and Runup
+
+[6] George, Augmented Riemann Solvers for the shallow water equations over variable topography with steady states and inundation, 2008
+
+\begin{thebibliography}{1}
+
+\bibitem{bar} George, D. {\em Augmented Riemann solvers for the shallow water equations over variable topography with steady states and inundation.} Journal of Computational Physics 227 (2008)  3089-3113.
+
+\bibitem{bar} LeVeque, R. J. {\em A well-balanced path-integral f-wave method for hyperbolic problems with source terms.}
+
+\end{thebibliography}
+
+\end{document}

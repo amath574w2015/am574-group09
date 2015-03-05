@@ -1,0 +1,3 @@
+The current version of the draft as of March 4, 2015  5:14 PM PST.
+
+There is still a great deal of work to be done, particularly in cleaning up some of the organization and in the "Numerical Experiments" section, which cannot be finished until our code is fully working.  Also, the opening sections will probably be shortened to be more concise, depending on how much space we need when everything is done.

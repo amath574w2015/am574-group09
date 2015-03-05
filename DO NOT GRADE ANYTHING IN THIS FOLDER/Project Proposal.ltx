@@ -1,0 +1,41 @@
+\documentclass[12pt]{article} 
+
+\usepackage[english]{babel}
+
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\usepackage{amsthm}
+\usepackage{mathtools}
+\usepackage[titletoc,toc,title]{appendix}
+\usepackage{fancyvrb}
+\usepackage[margin=1in]{geometry}
+\usepackage{titling}
+\usepackage{verbatim}
+
+\title{Augmented approximate Riemann solvers for the shallow water equations with varying bathymetry}
+\author{Xin Chen \\ Jacob Ortega-Gingrich}
+\date{} 
+
+% CUSTOM COMMANDS
+\newcommand{\eref}[1]{\mbox{Eq.\hspace{.12cm}(\ref{eq:#1})}} 
+
+\begin{document}
+\maketitle
+
+The shallow water equations are a system of nonlinear partial differential equations derived from integrating the Navier-Stokes equations over depth.  They are useful for applications involving flows with little vertical variation from hydrostatic equilibrium, such as waves whose length scales greatly exceed the depths of the fluid (for example, in the modeling of tsunami waves).  In one spatial dimension with varying bathymetry, the equations take the form
+\begin{align*}
+h_t+(h u)_x&=0\\
+(h u)_t+\left(h u^2+\frac{1}{2} g h^2\right)_x&=-g h b_x
+\end{align*}
+where $h(x,t)$ is the depth of the water (from the free surface to the sea floor), $u(x,t)$ is the velocity of the water and $b(x)$ is the fixed underwater topography.  As these equations take the form of a conservation law (with a source term for the transfer of momentum between the fluid and the sea floor), a finite volume-based approach is natural for many applications.  Such an approach involves solving a large number of Riemann problems at every grid cell interface at each time step.  Although the Riemann problem between cells of arbitrary states has a known solution, practicality demands an approximate solver which can be executed quickly at each cell interface.  In order to be useful for applications, such a solver must possess a number of properties.  As many applications, such as tsunami waves, involve perturbations of a steady state equilibrium (namely, the fluid at rest), the solver must be able to maintain certain steady states, even with sharply varying underlying topography.  For applications involving flooding, it is necessary for the solver to maintain depth non-negativity while handling dry or nearly dry grid cells ($h \approx 0$).
+
+In this project, we will examine the augmented Riemann solver proposed by David L. George (2008) for the shallow water equations.  This approach adds to the existing system of two quantities (depth and momentum) momentum flux as well as the underlying bathymetry, creating a Riemann problem with four waves.  In addition to the two waves in the standard Roe solver, this approach introduces a stationary wave which acts as a forcing term to maintain steady states over varying bathymetry, thus producing a well balanced method.  This approach also results in a positive semi-definite method, allowing for situations where the depth may become zero (dry cells) at various points, allowing for the modeling of inundating flows.  In our project, we will present George's method, with particular attention to how precisely these desirable properties arise.  We also plan to implement it by creating a Riemann solver for the classical clawpack package.
+
+\begin{thebibliography}{1}
+
+\bibitem{bar} George, D. {\em Augmented Riemann solvers for the shallow water equations over variable topography with steady states and inundation.} Journal of Computational Physics 227 (2008)  3089-3113.
+
+\end{thebibliography}
+
+\end{document}
