@@ -1,0 +1,13 @@
+\beamer@endinputifotherversion {3.20pt}
+\beamer@sectionintoc {2}{Introduction}{3}{0}{1}
+\beamer@subsectionintoc {2}{1}{The shallow water equations}{3}{0}{1}
+\beamer@subsectionintoc {2}{2}{The wave propagation algorithm}{7}{0}{1}
+\beamer@subsectionintoc {2}{3}{The f-wave method}{8}{0}{1}
+\beamer@subsectionintoc {2}{4}{The Roe solver}{9}{0}{1}
+\beamer@sectionintoc {3}{The HLLE solver and depth non-negativity}{10}{0}{2}
+\beamer@sectionintoc {4}{The augmented solver}{15}{0}{3}
+\beamer@subsectionintoc {4}{1}{The augmented solver for homogeneous SWE}{15}{0}{3}
+\beamer@subsectionintoc {4}{2}{The augmented solver for SWE with a source term}{20}{0}{3}
+\beamer@sectionintoc {5}{Numerical Experiments}{29}{0}{4}
+\beamer@sectionintoc {6}{Summary}{31}{0}{5}
+\beamer@sectionintoc {7}{References}{32}{0}{6}

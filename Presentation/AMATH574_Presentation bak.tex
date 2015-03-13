@@ -1,0 +1,229 @@
+\documentclass{beamer}
+
+% \usepackage{beamerthemesplit} // Activate for custom appearance
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\usepackage{amsthm}
+\usepackage{mathtools}
+\usepackage[titletoc,toc,title]{appendix}
+\usepackage{fancyvrb}
+\usepackage[margin=1in]{geometry}
+\usepackage{verbatim}
+
+\title{Augmented approximate Riemann solvers for the shallow water equations with varying bathymetry}
+\author{Jacob Ortega-Gingrich\\ Xin Chen}
+\date{\today}
+
+\begin{document}
+
+\frame{\titlepage}
+
+
+\section[Outline]{Outline}
+\frame{\tableofcontents}
+
+\section{Introduction}
+\subsection{The shallow water equations}
+
+\frame
+{
+ \frametitle{The shallow water equations}
+ The shallow water equations are given by
+ \begin{align*}
+h_t+(h u)_x&=0\\
+(h u)_t+\left(h u^2+\frac{1}{2} g h^2\right)_x&=-g h b_x
+\end{align*}
+where $h(x,t)$ is the depth of the water (from the free surface to the sea floor), $u(x,t)$ is the velocity of the water and $b(x)$ is the fixed underwater topography.
+}
+
+\frame
+{
+\frametitle{Some desired properties of the Riemann solver for modeling drying and inundation}
+\begin{itemize}
+\item<1-> Preservation of Non-Negativity of depth solutions.
+\item<2-> Prevention of non-physical oscillations along steep interfaces of shorelines.
+\item<3-> Preservation of Steady States. \\
+Since tsunami waves are small perturbations of an ocean at rest over variable bathymetry, it is critical that the Riemann solver be able to preserve steady states involving a flat surface even with large variations in the underlying topography.
+\end{itemize}
+}
+
+\subsection{The "simple" wave propagation algorithm}
+\frame
+{
+  \frametitle{The "simple" wave propagation algorithm}
+  \begin{itemize}
+  \item<1-> The first order method
+  \begin{align*}
+Q_i^{n+1}&=Q_i^n-\frac{\Delta t}{\Delta x} (\mathcal{A}^+\Delta Q_{i-\frac{1}{2}}^n+\mathcal{A}^-\Delta Q_{i+\frac{1}{2}}^n).
+\end{align*}
+Where the jump is decomposed into separate waves
+\begin{align*}
+Q_i^n-Q_{i-1}^n=\sum_{p=1}^{M_w} \mathcal{W}_{i-\frac{1}{2}}^p
+\end{align*}
+which propagate from the discontinuity at speeds $s_{i-\frac{1}{2}}^p$.  The fluctuations then used to update the cell values are
+\begin{align*}
+\mathcal{A}^- \Delta Q_{i-\frac{1}{2}}&=\sum_{\lbrace p:s^p_{i-\frac{1}{2}}<0\rbrace} s_{i-\frac{1}{2}}^p \mathcal{W}_{i-\frac{1}{2}}^p\\
+\mathcal{A}^+\Delta Q_{i-\frac{1}{2}}&=\sum_{\lbrace p: s_{i-\frac{1}{2}}^p>0\rbrace} s_{i-\frac{1}{2}}^p \mathcal{W}_{i-\frac{1}{2}}^p.
+\end{align*}
+  \end{itemize}
+}
+
+\subsection{The f-wave method}
+\frame
+{
+\frametitle{The f-wave method}
+The f-wave method decomposes the jump in the flux instead of the actual cell average, thus the name.
+\begin{align*}
+f(Q_i)-f(Q_{i-1})=\sum_{p=1}^{M_w} \mathcal{Z}_{i-\frac{1}{2}}^p
+\end{align*}
+and we may define our updating fluctuations as
+\begin{align*}
+\label{fwave fluc}
+\mathcal{A}^- \Delta Q_{i-1/2}=\sum_{\{p:s_{i-1/2}^p <0\}} \mathcal{Z}_{i-1/2}^p\\
+\mathcal{A}^+ \Delta Q_{i-1/2}=\sum_{\{p:s_{i-1/2}^p >0\}} \mathcal{Z}_{i-1/2}^p
+\end{align*}
+}
+
+\subsection{The Roe solver}
+\frame
+{
+\frametitle{The Roe solver}
+It is an approximate Riemann solver based on a linearization about a specific mean state $(\bar h, \hat u)$ where $\bar h$ is the arithmetic mean of the depths on either side of the interface and the speed is given by
+\begin{equation}
+\label{uhat}
+\hat u=\frac{\sqrt{h_{i-1}} u_{i-1}+\sqrt{h_i} u_i}{\sqrt{h_{i-1}}+\sqrt{h_i}}.
+\end{equation}
+The eigenvalues (known as the Roe wave speeds) of the linearized Jacobian $\hat A$ are $\hat \lambda^1=\hat u-\hat c$, $\hat \lambda^2=\hat u+\hat c$ where $\hat c=\sqrt{g \bar h}$.  The corresponding eigenvalues are
+\begin{equation}
+\label{roeeig}
+\hat r^1=\left(\begin{array}{cc}1\\ \hat u-\hat c\end{array}\right), \hat r^2=\left(\begin{array}{cc} 1\\ \hat u +\hat c\end{array}\right).
+\end{equation}
+}
+
+\section{The HLLE solver and depth non-negativity}
+\frame{
+\frametitle{The HLLE solver and depth non-negativity}
+HLLE solver is a modified version of the Roe solver. Like the Roe solver, the HLLE solver uses two waves to approximate the solution to the Riemann problem.  The waves themselves are very similar to the waves obtained from an eigenvalue decomposition of the Roe matrix, but "limited" so as to prevent outflow so fast as to allow the depth in any cell to become negative.  The wave speeds, which are known as the Einfeldt speeds, are given by
+\begin{equation*}
+\label{einfeldt}
+\check s^1_{i-\frac{1}{2}}= \min(\lambda^-(Q_{i-1}^n),\hat \lambda^-_{i-\frac{1}{2}}), ~~
+\check s^2_{i-\frac{1}{2}}=\max(\lambda^+(Q_i^n),\hat \lambda^+_{i-\frac{1}{2}})
+\end{equation*}
+where $\lambda^\pm(Q)$ are the eigenvalues of the Jacobian matrix of the flux function evaluated at $Q$.  The corresponding wave basis vectors (which are no longer necessarily eigenvectors of any matrix in particular) are given by $w_{i-\frac{1}{2}}^p=(1,\check s_{i-\frac{1}{2}^p})^T$.  Unfortunately, the HLLE solver continues to fail to capture large transonic rarefactions and it does not necessarily preserve steady states.
+}
+\section{The augmented solver}
+\subsection{The augmented solver for homogeneous SWE}
+\frame
+{
+\frametitle{The augmented solver for homogeneous SWE}
+The idea of the augmented Riemann solver is to add more "correctors" to the standard two-wave decomposition. For the homogeneous version of SWE, the discontinuity is decomposed as
+\begin{align*}
+\begin{bmatrix}
+H_i-H_{i-1}\\
+HU_i-HU_{i-1}\\
+\varphi(Q_i)-\varphi(Q_{i-1})
+\end{bmatrix}=\sum_{p=1}^3 \alpha_{i-1/2}^p w_{i-1/2}^p.
+\end{align*}
+Where $\varphi=h u^2+\frac{1}{2} g h^2$ is the momentum flux. The flux waves are defined as
+\begin{align*}
+\mathcal{Z}_{i-1/2}^p =\left[\mathbf{0}_{2\times1} \quad \mathbf{I}_{2\times2}\right] \alpha_{i-1/2}^p w_{i-1/2}^p
+\end{align*}
+Then we can use the update rules of f-wave method to progress to the next time step. 
+}
+
+\frame
+{
+\frametitle{Determining the basis waves $w_{i-\frac{1}{2}}^p$}
+To maintain non-negativity, we choose to include the Einfeldt speeds $\check s_{i-\frac{1}{2}^\pm}$ and their corresponding  in our wave decomposition
+\begin{align*}
+\left\{ w_{i-1/2}^1,s_{i-1/2}^1\right\}=\left\{\left(1,\check{s}_{i-1/2}^-,\left(\check{s}_{i-1/2}^-\right)^2\right)^T, \check{s}_{i-1/2}^- \right\} \\
+\left\{ w_{i-1/2}^3,s_{i-1/2}^3\right\}=\left\{\left(1,\check{s}_{i-1/2}^+,\left(\check{s}_{i-1/2}^+\right)^2\right)^T, \check{s}_{i-1/2}^+ \right\}.
+\end{align*}
+For the intermediate "corrector" wave, our choice is much less clear cut.  For now, we shall make the simplest choice possible of
+\begin{align*}
+\left\{ w_{i-1/2}^2,s_{i-1/2}^2      \right\}=\left\{  \left(0,0,1\right)^T, \frac{1}{2} \left(\check{s}_{i-1/2}^- + \check{s}_{i-1/2}^+ \right)    \right\},
+\end{align*}
+}
+
+\subsection{The augmented solver for SWE with source term}
+\frame
+{
+\frametitle{The augmented solver for SWE with source term}
+One more "corrector term" is added to the decomposition to account for the impact of the source term
+\begin{align*}
+\begin{bmatrix}
+H_i-H_{i-1}\\
+HU_i-HU_{i-1}\\
+\varphi(Q_i)-\varphi(Q_{i-1}) \\
+B_i-B_{i-1}
+\end{bmatrix}=\sum_{p=0}^3 \alpha_{i-1/2}^p w_{i-1/2}^p,
+\end{align*}
+And the flux waves are given by
+\begin{align*}
+\mathcal{Z}_{i-1/2}^p =\left[\mathbf{0}_{2\times1} \quad \mathbf{I}_{2\times2} \quad \mathbf{0}_{2\times1}\right] \alpha_{i-1/2}^p w_{i-1/2}^p
+\end{align*}
+}
+
+\frame
+{
+\frametitle{Determining $w_0$}
+$w_0$ is supposed to make sure that the solver is well balanced with varying bathymetry. From the following theorem
+
+Suppose that a smooth steady state solution to the shallow water equations exists between two points $x_l$ and $x_r$, with $b(x_l) \neq b(x_r)$. If the vector $\tilde{q}(x,t)$ is differenced between $x_l$ and $x_r$, then the difference must satisfy
+\begin{equation}
+\tilde{q}(x_r,t)-\tilde{q}(x_l,t)=(b(x_r)-b(x_l))\begin{bmatrix}
+\frac{g\bar{H}(q(x_l,t),q(x_r,t))}{\overline{\lambda^+ \lambda^-}(q(x_l,t),q(x_r,t))}\\
+0\\
+-g\tilde{H}(q(x_l,t),q(x_r,t))\\
+1
+\end{bmatrix}
+\end{equation}
+}
+\frame
+{
+This theorem gives us an important condition on the jump between two adjacent cell averages in a steady state solution of which we may take advantage to select a wave $w_{i-\frac{1}{2}}^0$ to capture precisely these steady state jumps.  Making use of it, we define
+\begin{equation}
+w_{i-1/2}^0=\begin{bmatrix}
+\frac{g\bar{H}(Q_{i-1},Q_i)}{\overline{\lambda^+ \lambda^-}(Q_{i-1},Q_i)}\\
+0\\
+-g\tilde{H}(Q_{i-1},Q_i)\\
+1
+\end{bmatrix},
+\end{equation}
+}
+
+\subsection{Practical considerations for problems involving dry cells and shorelines}
+\frame
+{
+\frametitle{Treatment for near-dry cells}
+As it turns out, using a positive semi-definite method is not all that is necessary for effective handling of dry or near dry states.  Because of the potential of small numerical errors in cells where $H_i$ is very small to result in spurious oscillatory instabilities, it is oftentimes best not to attempt to execute the Riemann solver at interfaces between nearly-dry cells. The depth and momentum of near-dry cells are set to zero to avoid numerical difficulties without hampering the accuracy of the results. The threshold is set to $10^{-3}$ meters.
+}
+\frame
+{
+\frametitle{Treatment for neighboring wet and dry cells}
+A Figure here may explain things a lot more clearly.
+Over flat topography, the exact solution to a Riemann problem involving a wet and a dry state consists of a single rarefaction wave with one edge proceeding into the next cell. The right edge of the rarefaction wave travels at speed
+\begin{align*}
+U_{i-1}+2\sqrt{g H_{i-1}}.
+\end{align*}
+This rarefaction wave is generally transonic and, as a result, should "update" both cells.  In order to capture the effects of the rarefaction on both cells, we see that we require two waves at a minimum.  One way to accomplish this goal would be to modify the Einfeldt speeds suitably so that the primary HLLE-based waves follow the edges of the rarefaction fan.  For example, for a dry state state on the right ($H_i=0$), we might define the modified Einfeldt speeds as
+\begin{align*}
+\check s_{i-\frac{1}{2}}^-=U_{i-1}-\sqrt{g H_{i-1}}, & \check s_{i-\frac{1}{2}}=U_{i-1}+2\sqrt{g H_{i-1}}
+\end{align*}
+and then use these (and their corresponding basis waves) in the decomposition described in the previous section.
+}
+\frame
+{
+\frametitle{Treatment for steep shorelines}
+A Figure here may explain things a lot more clearly.\\
+When the shoreline is very steep, the incoming wave may or may not overflow into the next cell. so a na\"ive execution of the usual Riemann solver in such a case would introduce spurious waves. The solution is to compute the middle state of the solid wall Riemann problem using the HLLE method
+\begin{equation}
+\check{H}^*=\frac{HU_{L}-HU_R+\check{s}_{i-1/2}^+ H_R-\check{s}_{i-1/2}^- H_L}{\check{s}_{i-1/2}^+-\check{s}_{i-1/2}^-}
+\end{equation}
+using ghost cells for a solid wall boundary and then compare $\check{H}^*$ with the height of the jump in bathymetry $\Delta b$. If $\check{H}^*>\Delta b$, then the Riemann solver is used. Otherwise, we treat the jump in bathymetry as a solid wall.
+}
+
+\section{Numerical Results}
+\section{Conclusions}
+\end{document}
